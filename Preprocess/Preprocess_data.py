@@ -1,59 +1,128 @@
-import os
-import re
-import random
+"""
+Đọc ảnh -> Chuyển Grayscale.
+Áp dụng Perspective Transform / Deskew (nếu ảnh bị nghiêng).
+Tăng cường độ tương phản bằng CLAHE.
+Resize giữ tỉ lệ với height = 32 + Pad chiều rộng về kích thước chuẩn của batch.
+Scale pixel về [0, 1] và đưa vào Tensor.
+"""
+
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
+import os
 
-def create_image_dataframe(image_dir):
+from Preprocess.utils import ( convert_to_grayscale, load_dataset_to_dataframe,
+                              find_document_corners, deskew_perspective,
+                              apply_clahe, resize_and_pad,normalization,
+                              )
+
+
+def process_document_pipeline(
+    df, 
+    image_col='image_path', 
+    target_height=32, 
+    target_width=None, 
+    clip_limit=2.0, 
+    tile_grid_size=(8, 8),
+    save=False,                  # Thêm tham số bật/tắt tính năng lưu ảnh
+    output_dir='processed_outputs' # Thư mục lưu ảnh đầu ra
+):
     """
-    DataFrame chỉ chứa duy nhất cột image_path đúng theo yêu cầu.
-    """
-    valid_extensions = (".jpg", ".jpeg", ".png", ".bmp")
-    data = []
+    Pipeline xử lý ảnh toàn diện dành cho OCR từ DataFrame chứa đường dẫn ảnh.
     
-    if not os.path.exists(image_dir):
-        print(f"Thư mục không tồn tại: {image_dir}")
-        return pd.DataFrame(columns=["image_path"])
+    Args:
+        df (pd.DataFrame): DataFrame chứa dữ liệu đầu vào.
+        image_col (str): Tên cột chứa đường dẫn file ảnh trong DataFrame.
+        target_height (int): Chiều cao chuẩn cho model OCR (mặc định 32).
+        target_width (int, optional): Chiều rộng cố định của batch. Nếu None, giữ nguyên chiều dài linh hoạt.
+        clip_limit (float): Ngưỡng giới hạn độ tương phản cho CLAHE.
+        tile_grid_size (tuple): Kích thước lưới chia ảnh cho CLAHE.
+        save (bool): Có lưu ảnh đã xử lý xuống thư mục hay không.
+        output_dir (str): Đường dẫn thư mục lưu ảnh khi save=True.
         
-    for f in os.listdir(image_dir):
-        if f.lower().endswith(valid_extensions):
-            img_path = os.path.join(image_dir, f)
-            data.append({"image_path": img_path})
+    Returns:
+        pd.DataFrame: DataFrame bổ sung các cột:
+                      - 'processed_image': mảng numpy chứa giá trị đã chuẩn hóa để feed vào model.
+                      - 'saved_path': đường dẫn file ảnh đã lưu (nếu save=True).
+                      - 'processing_status': trạng thái thành công hay lỗi.
+    """
+    # Nếu bật chế độ save, tạo thư mục lưu nếu chưa tồn tại
+    if save and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        
+    processed_images = []
+    saved_paths = []
+    statuses = []
+    
+    for idx, path in enumerate(df[image_col]):
+        try:
+            # Bước 1: Đọc ảnh
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Không tìm thấy file: {path}")
+            image = cv2.imread(path, cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError(f"Không thể giải mã file ảnh: {path}")
+                
+            # Bước 2: Tự động tìm góc và kéo thẳng tài liệu
+            pts = find_document_corners(image)
+            if pts is not None:
+                image = deskew_perspective(image, pts)
+                
+            # Bước 3: Tăng cường độ tương phản bằng CLAHE
+            image = apply_clahe(image, clip_limit=clip_limit, tile_grid_size=tile_grid_size)
             
-    return pd.DataFrame(data)
+            # Bước 4: Chuyển đổi sang ảnh xám (Grayscale)
+            image = convert_to_grayscale(image)
+            
+            # Bước 5: Chuẩn hóa kích thước (Resize & Pad)
+            image = resize_and_pad(image, target_height=target_height, target_width=target_width)
+            
+            # --- BƯỚC LƯU ẢNH ---
+            saved_path = None
+            if save:
+                # Đặt tên file mới dựa theo index và tên gốc để tránh trùng lặp
+                file_name = f"processed_{idx}_{os.path.basename(path)}"
+                saved_path = os.path.join(output_dir, file_name)
+                cv2.imwrite(saved_path, image) # Lưu ảnh ở dạng uint8 (0-255 chuẩn)
+            
+            # Bước 6: Chuẩn hóa giá trị pixel về khoảng [0, 1] (Dùng để đưa vào Model)
+            normalized_image = normalization(image)
+            
+            processed_images.append(normalized_image)
+            saved_paths.append(saved_path)
+            statuses.append("Success")
+            
+        except Exception as e:
+            processed_images.append(None)
+            saved_paths.append(None)
+            statuses.append(f"Error: {str(e)}")
+            
+    # Đóng gói kết quả vào DataFrame mới
+    result_df = df.copy()
+    result_df['processed_image'] = processed_images
+    if save:
+        result_df['saved_path'] = saved_paths
+    result_df['processing_status'] = statuses
+    
+    return result_df
 
 
 if __name__ == "__main__":
-    # img_dir = r"../OCR/Data/vietnamese_original/train_images"
-    # df = create_image_dataframe(img_dir)
+    img_dir = r""
+    label_dir = r""
+    output_dir = r""
 
-    # print(f"Tổng số dòng trong DataFrame: {len(df)}")
-    # print(df.head())
+    df_input = load_dataset_to_dataframe(image_dir=img_dir, 
+                                         label_dir=label_dir,
+                                         columns=['image_path', 'label_path'],
+                                         save = False, # có thể chỉnh nếu muốn lưu
+                                         output_dir= output_dir)
 
-    img_path = r"../OCR/Data/vietnamese_original/train_images/im0005.jpg"
-
-    # 1. Đọc ảnh và làm mờ (blur) để giảm nhiễu
-    img = cv2.imread(img_path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # 2. Định nghĩa ngưỡng dưới (lower) và ngưỡng trên (upper)
-    # Nếu làm việc trên ảnh xám (Grayscale):
-    lower = np.array([50], dtype=np.uint8)
-    upper = np.array([200], dtype=np.uint8)
-
-    # (Hoặc nếu làm việc trên không gian màu HSV để lọc màu sắc cụ thể):
-    # hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    # blur = cv2.GaussianBlur(hsv, (5, 5), 0)
-    # lower = np.array([30, 50, 50])
-    # upper = np.array([90, 255, 255])
-
-    # 3. Tạo mask bằng cv2.inRange
-    mask = cv2.inRange(blur, lower, upper)
-
-    # Hiển thị hoặc sử dụng mask kết quả
-    cv2.imshow("Mask", mask)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    preprocess_output_dir= r""
+    df_output = process_document_pipeline(
+        df=df_input, 
+        image_col='image_path', 
+        target_height=32,
+        save=True,                   # Kích hoạt lưu ảnh
+        output_dir=preprocess_output_dir   # Thư mục tùy chỉnh (tuỳ chọn)
+    )
