@@ -1,3 +1,8 @@
 Data/
 .env/
 .vscode
+Train_model/config.py
+Train_model/__pycache__/dataset.cpython-314.pyc
+Train_model/__pycache__/config.cpython-314.pyc
+Train_model/__pycache__/model.cpython-314.pyc
+Train_model/__pycache__/Train_dbnet.cpython-314.pyc
