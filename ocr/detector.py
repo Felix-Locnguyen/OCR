@@ -17,7 +17,7 @@ import numpy as np
 #  nhưng ở đây mình chỉ cần detection nên dùng lớp con cho nhẹ, chạy nhanh hơn)
 from paddleocr import TextDetection
 
-from .config import DET_MODEL
+from .config import DET_DEVICE, DET_MODEL, DET_MODEL_DIR
 
 # Dấu "." phía trước nghĩa là "import từ package hiện tại"
 # -> mình đang ở trong package ocr/, nên ".config" = ocr/config.py
@@ -26,15 +26,27 @@ from .config import DET_MODEL
 class Detector:
     """Bọc model PaddleOCR thành class gọn để dễ dùng ở nơi khác."""
 
-    def __init__(self, model_name=DET_MODEL, device="gpu"):
+    def __init__(self, model_name=DET_MODEL, device=DET_DEVICE):
         """Khởi tạo: tải model về RAM (mất vài giây, chỉ làm 1 lần).
 
         Args:
             model_name: tên model, xem ở config.py
-            device: "gpu" dùng card đồ họa, "cpu" dùng bộ xử lý thường
+            device: "gpu" hay "cpu" — tự quyết định ở config.py (DET_DEVICE)
         """
-        # Lần đầu chạy, PaddleOCR tự tải file model về máy (cần có mạng)
-        self.model = TextDetection(model_name=model_name, device=device)
+        # File model có sẵn trong repo (weights/...)? -> dùng luôn, khỏi tải.
+        # Không có (VD: clone repo thiếu file lớn) -> để PaddleOCR tự tải mạng.
+        model_dir = str(DET_MODEL_DIR) if DET_MODEL_DIR.exists() else None
+
+        self.model = TextDetection(
+            model_name=model_name,
+            model_dir=model_dir,      # None = tải từ mạng như mặc định
+            device=device,
+            # MKLDNN = tính năng "tối ưu CPU" của Paddle — bản 3.3.1 đang CÓ BUG
+            # khi bật trên CPU (NotImplementedError ... onednn_instruction).
+            # -> Tắt để chạy được ở CPU (như Hugging Face Space).
+            # Ở GPU tham số này không được đọc tới nên tắt luôn là vô hại.
+            enable_mkldnn=False,
+        )
 
     def detect(self, image_bgr) -> list[np.ndarray]:
         """Tìm các khung chữ trong ảnh.

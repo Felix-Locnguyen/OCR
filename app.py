@@ -23,9 +23,10 @@ CÁCH CHẠY:
   Sau đó mở trình duyệt tại http://127.0.0.1:7860
 """
 
-import json
+import json 
+import os
 import sys
-import time
+import time 
 from pathlib import Path
 
 import cv2
@@ -244,7 +245,7 @@ if __name__ == "__main__":
         server_name="0.0.0.0",   # 0.0.0.0 = nghe TẤT CẢ mạng (vào từ máy khác
                                  #   trong cùng wifi được; "127.0.0.1" thì chỉ
                                  #   máy này truy cập được)
-        server_port=7860,        # cổng mặc định của Gradio
+        # HF Space cấp sẵn PORT riêng; chạy máy bạn thì dùng 7860 (mặc định)
+        server_port=int(os.environ.get("PORT", 7860)),
         share=False,             # True sẽ tạo link công khai *.gradio.live
-        inbrowser=True,          # tự mở trình duyệt
     )

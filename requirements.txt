@@ -1,0 +1,39 @@
+# ============================================================
+# Dependencies cho dự án OCR tiếng Việt
+# ============================================================
+# File này dùng cho Hugging Face Space (chạy CPU).
+# Máy CÓ GPU: xem hướng dẫn đổi bản GPU ở cuối file.
+#
+# Cài cục bộ:  pip install -r requirements.txt
+# ============================================================
+
+# --- Giao diện ---
+gradio==6.31.0
+
+# --- Tìm khung chữ (PaddleOCR) ---
+# paddlepaddle trên PyPI là bản CPU (Space không có GPU nên dùng bản này)
+paddleocr==3.7.0
+paddlepaddle==3.3.1
+
+# --- Đọc chữ (VietOCR) ---
+# Thêm index của PyTorch để lấy bản CPU (nhỏ gọn, không kéo ~2GB CUDA).
+# torch PHẢI ghi rõ "+cpu" nếu không pip sẽ lấy bản CUDA khổng lồ từ PyPI.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.1+cpu
+torchvision==0.22.1+cpu
+vietocr==0.3.13
+
+# --- Xử lý ảnh / tính toán (pin đúng bản đã test) ---
+numpy==2.3.5
+shapely==2.2.0
+Pillow==10.2.0
+# opencv: để paddleocr tự chọn bản tương thích (không pin)
+
+# ============================================================
+# MÁY CÓ GPU (như máy bạn đang chạy)?
+# Xoá 3 dòng: paddlepaddle, --extra-index-url, torch, torchvision
+# rồi thay bằng:
+#   paddlepaddle-gpu==3.3.1          (bản cu126 cho RTX 20xx/30xx/40xx)
+#   torch==2.7.1
+#   torchvision==0.22.1
+# ============================================================

@@ -1,6 +1,19 @@
+---
+#Thông tin cho Hugging Face Space (GitHub sẽ hiển thị 2 dòng --- này như text thường)
+title: MY-OCR
+emoji: 📄
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
 # OCR — Nhận diện văn bản tiếng Việt
 
 Dự án học tập về Computer Vision: **phát hiện chữ** và **nhận diện chữ** trên ảnh tiếng Việt.
+
+> 🌐 **Thử online:** [huggingface.co/spaces/LOCNGUYEN120707/MY-OCR](https://huggingface.co/spaces/LOCNGUYEN120707/MY-OCR)
 
 ## Kiến trúc
 
@@ -24,11 +37,16 @@ venv_paddle/bin/pip install paddlepaddle-gpu==3.3.1 \
 venv_paddle/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
-Model pretrained tự tải về lần đầu chạy (cần mạng).
+Model pretrained: file `weights/` (~150MB) được đẩy kèm **Hugging Face Space**;
+clone từ GitHub (không có weights) thì code tự tải từ mạng về như cũ.
+Cài đặt môi trường bằng `requirements.txt` (bản CPU) hoặc xem hướng dẫn dưới.
 
 ## Cách dùng
 
 ```bash
+# 🖥️ Giao diện web (3 card: input / detection / text)
+venv_paddle/bin/python app.py            # mở http://127.0.0.1:7860
+
 # Đọc 1 ảnh
 venv_paddle/bin/python run_ocr.py anh_can_doc.jpg
 
@@ -53,8 +71,11 @@ ocr/
 ├── recognizer.py   # Bước 2: VietOCR → đọc chữ từ crop
 ├── pipeline.py     # Bước 3: gộp 2 bước + vẽ kết quả
 └── evaluate.py     # Bước 4: precision/recall/accuracy so với ground truth
-run_ocr.py         # entry point (file bạn gọi để chạy)
+app.py              # 🖥️ giao diện Gradio (3 card) — chạy trên HF Space
+run_ocr.py         # entry point dòng lệnh (file bạn gọi để chạy)
 smoke_test.py      # kiểm tra nhanh pipeline trên 1 ảnh
+requirements.txt    # dependencies (bản CPU cho Space)
+weights/            # file model ~150MB (chỉ có trên HF Space, không lên GitHub)
 ```
 
 Mỗi file đều có docstring giải thích **TẠI SAO** làm vậy (không chỉ "làm gì"),

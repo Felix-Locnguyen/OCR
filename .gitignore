@@ -16,5 +16,9 @@ __pycache__/
 # Model checkpoint
 *.pth
 
+# Thư mục weights (~150MB) — chỉ đẩy lên Hugging Face Space, KHÔNG lên GitHub
+# (GitHub giới hạn 100MB/file, file weights 145MB sẽ bị từ chối)
+weights/
+
 # Kết quả OCR
 Data/results/

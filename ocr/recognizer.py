@@ -22,33 +22,43 @@ from PIL import Image
 from vietocr.tool.config import Cfg
 from vietocr.tool.predictor import Predictor
 
-from .config import VIETOCR_CONFIG, VIETOCR_DEVICE
+from .config import (VIETOCR_CONFIG, VIETOCR_CONFIG_FILE, VIETOCR_DEVICE,
+                     VIETOCR_WEIGHTS)
 
 
 class Recognizer:
     """Bọc VietOCR thành class gọn."""
 
     def __init__(self, config_name=VIETOCR_CONFIG, device=VIETOCR_DEVICE):
-        """Khởi tạo: tải config + trọng số (weights) của model.
+        """Khởi tạo: nạp config + trọng số (weights) của model.
 
         Args:
             config_name: tên cấu hình ("vgg_transformer" hoặc "vgg_seq2seq")
-            device: "cuda:0" (GPU) hoặc "cpu"
+            device: "cuda:0" (GPU) hoặc "cpu" — tự quyết định ở config.py
 
-        Lưu ý: lần đầu chạy sẽ tải weights từ vocr.vn (cần mạng,
-        khoảng vài trăm MB). Lần sau dùng lại file đã tải.
+        Ưu tiên file có sẵn trong repo (weights/...), thiếu mới tải mạng:
+          - File config : mặc định VietOCR tải từ vocr.vn MỖI lần khởi động
+          - File weights: ~145MB, mặc định tải từ vocr.vn (một lần, cache /tmp)
         """
-        # Tải file cấu hình từ vocr.vn — chứa các thông số như:
-        #   - kiến trúc model (backbone VGG19, lớp Transformer...)
-        #   - kích thước ảnh đầu vào
-        #   - đường dẫn file trọng số
-        self.config = Cfg.load_config_from_name(config_name)
+        # --- CONFIG ---
+        if VIETOCR_CONFIG_FILE.exists():
+            # Đọc file local -> chạy offline, không phụ thuộc vocr.vn
+            self.config = Cfg.load_config_from_file(str(VIETOCR_CONFIG_FILE))
+        else:
+            # Không có file -> tải config từ vocr.vn (cách mặc định)
+            self.config = Cfg.load_config_from_name(config_name)
 
         # Chỉ định nơi chạy model. VietOCR đọc giá trị này để đưa tensor lên GPU.
         self.config["device"] = device
 
-        # Tải trọng số (weights) đã train sẵn rồi nạp vào model.
-        # Predictor tự xử lý: đọc config -> dựng model -> load weights.
+        # --- WEIGHTS ---
+        # Predictor đọc config["weights"]:
+        #   bắt đầu bằng "http" -> tải từ mạng;  không -> đọc file local.
+        # Nên ghi đè đường dẫn local vào là nó tự dùng, không tải gì.
+        if VIETOCR_WEIGHTS.exists():
+            self.config["weights"] = str(VIETOCR_WEIGHTS)
+
+        # Dựng model rồi nạp trọng số. Predictor tự xử lý: config -> model -> weights.
         self.predictor = Predictor(self.config)
 
     def read_batch(self, images: list) -> list[str]:

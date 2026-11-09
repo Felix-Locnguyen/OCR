@@ -43,22 +43,66 @@ LABELS = DATA / "labels"                       # các file gt_1.txt ... gt_2000.
 RESULTS = ROOT / "Data" / "results"
 
 # ---------------------------------------------------------------------------
+# THIẾT BỊ (GPU / CPU) — TỰ ĐỘNG PHÁT HIỆN
+# ---------------------------------------------------------------------------
+# Mục đích: code chạy được ở 2 nơi không cần sửa:
+#   - Máy bạn có GPU  -> dùng GPU (nhanh, ~0.4s/ảnh)
+#   - Hugging Face Space (chỉ có CPU) -> tự chuyển sang CPU (chậm hơn ~2-5s/ảnh)
+#
+# Cách làm: 2 thư viện (paddle cho detection, torch cho VietOCR) KHÔNG phụ
+# thuộc nhau -> phải kiểm tra từng cái.
+def _has_paddle_cuda() -> bool:
+    """True nếu Paddle được biên dịch VỚI CUDA và GPU thật tồn tại."""
+    try:
+        import paddle
+        return (paddle.is_compiled_with_cuda()          # bản build có CUDA
+                and paddle.device.cuda.device_count() > 0)  # và thấy GPU
+    except Exception:
+        return False
+
+
+def _has_torch_cuda() -> bool:
+    """True nếu PyTorch thấy GPU."""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+# PaddleOCR dùng tên "gpu"/"cpu" (tham số device của TextDetection)
+DET_DEVICE = "gpu" if _has_paddle_cuda() else "cpu"
+# VietOCR (PyTorch) dùng tên "cuda:0"/"cpu" — KHÁC cách đặt tên của Paddle!
+VIETOCR_DEVICE = "cuda:0" if _has_torch_cuda() else "cpu"
+
+# ---------------------------------------------------------------------------
 # MODEL
 # ---------------------------------------------------------------------------
 # Tên model detection của PaddleOCR.
 #   - "_det"   : chỉ bước TÌM KHUNG chữ (detection)
 #   - "_mobile": bản nhỏ, chạy nhanh (bản "_server" to hơn, chính xác hơn)
-# PaddleOCR sẽ tự tải file model về máy trong lần chạy đầu tiên (cần mạng).
 DET_MODEL = "PP-OCRv5_mobile_det"
 
 # Model nhận diện chữ của VietOCR. Có 2 lựa chọn:
 #   - "vgg_transformer" : chính xác hơn, nhưng chậm hơn (~86ms/ảnh)
 #   - "vgg_seq2seq"     : nhanh hơn (~12ms/ảnh), kém chính xác hơn đôi chút
-# Thử đổi sang "vgg_seq2seq" để cảm nhận sự khác biệt về tốc độ.
 VIETOCR_CONFIG = "vgg_transformer"
 
-# Thiết bị chạy: "cuda:0" = GPU thứ 0. Đổi thành "cpu" nếu máy không có GPU.
-VIETOCR_DEVICE = "cuda:0"
+# ---------------------------------------------------------------------------
+# FILE MODEL TRONG REPO (dự phòng khi KHÔNG có mạng)
+# ---------------------------------------------------------------------------
+# Hai file này được commit kèm dự án (đặc biệt cho Hugging Face Space):
+#   weights/PP-OCRv5_mobile_det/  ~5MB   (model tìm khung)
+#   weights/vgg_transformer.pth   ~145MB (model đọc chữ)
+# Nếu file TỒN TẠI -> dùng luôn (không tải gì cả, khởi động nhanh).
+# Nếu file THIẾU -> code tự tải từ mạng như trước (vẫn chạy được).
+DET_MODEL_DIR = ROOT / "weights" / DET_MODEL
+VIETOCR_WEIGHTS = ROOT / "weights" / "vgg_transformer.pth"
+
+# File config của VietOCR (gồm siêu tham số + bảng chữ cái vocab).
+# Lưu ý: mặc định VietOCR TẢI config từ vocr.vn MỖI lần khởi động (không cache)
+# -> có file này thì chạy offline, không phụ thuộc vocr.vn sống hay chết.
+VIETOCR_CONFIG_FILE = ROOT / "weights" / "vgg_transformer.yml"
 
 # ---------------------------------------------------------------------------
 # NGƯỠNG
