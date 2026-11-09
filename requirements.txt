@@ -17,15 +17,22 @@ paddlepaddle==3.3.1
 
 # --- Đọc chữ (VietOCR) ---
 # Thêm index của PyTorch để lấy bản CPU (nhỏ gọn, không kéo ~2GB CUDA).
-# torch PHẢI ghi rõ "+cpu" nếu không pip sẽ lấy bản CUDA khổng lồ từ PyPI.
+# Pin BẢN THƯỜNG "2.8.0" (KHÔNG ghi "+cpu"): pip vẫn chọn wheel +cpu vì nó là
+# version cao hơn trong index CPU — còn ghi "+cpu" thì Hugging Face từ chối
+# build (ZeroGPU chỉ nhận version có dạng "2.8.0" thuần).
+# torch 2.8.0: bản tối thiểu Hugging Face ZeroGPU chấp nhận (Space đang
+# chạy hardware zero-a10g — code vẫn tự chạy CPU, không dùng @spaces.GPU).
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.7.1+cpu
-torchvision==0.22.1+cpu
+torch==2.8.0
+torchvision==0.23.0
 vietocr==0.3.13
 
-# --- Xử lý ảnh / tính toán (pin đúng bản đã test) ---
-numpy==2.3.5
-shapely==2.2.0
+# --- Xử lý ảnh / tính toán ---
+# Lưu ý version: Space dùng Python 3.10, máy bạn 3.11 -> KHÔNG pin cứng
+# (pin cứng numpy 2.3.5 hay shapely 2.2.0 chỉ tồn tại cho Python >=3.11
+#  là build của Space thất bại). Dải version dưới tự chọn bản phù hợp.
+numpy>=1.24,<2.3
+shapely>=2.0
 Pillow==10.2.0
 # opencv: để paddleocr tự chọn bản tương thích (không pin)
 
@@ -34,6 +41,6 @@ Pillow==10.2.0
 # Xoá 3 dòng: paddlepaddle, --extra-index-url, torch, torchvision
 # rồi thay bằng:
 #   paddlepaddle-gpu==3.3.1          (bản cu126 cho RTX 20xx/30xx/40xx)
-#   torch==2.7.1
-#   torchvision==0.22.1
+#   torch==2.8.0
+#   torchvision==0.23.0
 # ============================================================

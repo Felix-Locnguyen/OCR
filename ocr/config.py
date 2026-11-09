@@ -12,6 +12,7 @@ chỉnh gì bạn chỉ cần sửa MỘT chỗ thay vì đi tìm trong nhiều 
 
 # pathlib.Path: class thay cho cách nối chuỗi os.path.join('/a', 'b')
 # Path giúp đường dẫn hoạt động đúng trên Windows, Linux, macOS mà không cần sửa.
+import os
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -70,10 +71,16 @@ def _has_torch_cuda() -> bool:
         return False
 
 
+# HF Space (hạ tầng zero-a10g) đặt biến môi trường SPACE="user/repo".
+# Trên đó, GPU CHỈ dùng được qua decorator @spaces.GPU của thư viện `spaces`.
+# Code mình không dùng decorator -> ép CPU cho TỰ DO DỰ ĐOÁN (tránh VietOCR
+# vô tình đưa tensor lên GPU rồi bị ZeroGPU chặn lúc chạy).
+ON_HF_SPACE = bool(os.environ.get("SPACE"))
+
 # PaddleOCR dùng tên "gpu"/"cpu" (tham số device của TextDetection)
-DET_DEVICE = "gpu" if _has_paddle_cuda() else "cpu"
+DET_DEVICE = "gpu" if _has_paddle_cuda() and not ON_HF_SPACE else "cpu"
 # VietOCR (PyTorch) dùng tên "cuda:0"/"cpu" — KHÁC cách đặt tên của Paddle!
-VIETOCR_DEVICE = "cuda:0" if _has_torch_cuda() else "cpu"
+VIETOCR_DEVICE = "cuda:0" if _has_torch_cuda() and not ON_HF_SPACE else "cpu"
 
 # ---------------------------------------------------------------------------
 # MODEL
