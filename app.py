@@ -3,10 +3,14 @@ GIAO DIỆN GRADIO CHO DỰ ÁN OCR
 ================================
 Đây là "lớp vỏ" đồ họa (GUI) bọc quanh pipeline OCR có sẵn.
 
-CẤU TRÚC GIAO DIỆN — 3 CARD:
-  Card 1 (INPUT)     : chọn / kéo thả ảnh vào
-  Card 2 (DETECTION) : ảnh đã được vẽ khung chữ
-  Card 3 (TEXT)      : danh sách chữ model đọc được
+BỐ CỤC GRID 2x2:
+  ┌───────────────────────┬───────────────────────┐
+  │ Ô 1: ẢNH ĐẦU VÀO      │ Ô 2: ẢNH NHẬN DIỆN    │
+  │ (chọn xong tự chạy)   │ (vẽ khung chữ)        │
+  ├───────────────────────┼───────────────────────┤
+  │ Ô 3: KÝ TỰ NHẬN DIỆN  │ Ô 4: THÔNG TIN + LƯU  │
+  │ (text đọc được)       │ [Lưu ảnh] [Lưu JSON]  │
+  └───────────────────────┴───────────────────────┘
 
 NGUYÊN TẮC QUAN TRỌNG:
   app.py CHỈ làm nhiệm vụ hiển thị + gọi hàm.
@@ -19,42 +23,47 @@ CÁCH CHẠY:
   Sau đó mở trình duyệt tại http://127.0.0.1:7860
 """
 
-import json 
+import json
 import sys
-import time 
+import time
 from pathlib import Path
 
 import cv2
 import gradio as gr
 
-# Thêm thư mục chứa file nầy vào đường dẫn tìm kiếm để import được package ocr
+# Thêm thư mục chứa file này vào đường dẫn tìm kiếm để import được package ocr
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ocr.config import RESULTS, TEST_IMAGES
+from ocr.config import RESULTS
 from ocr.pipeline import OcrPipeline, draw_results
 
 
+# ---------------------------------------------------------------------------
 # 1. MODEL — nạp MỘT LẦN DUY NHẤT
+# ---------------------------------------------------------------------------
 # Đây là điểm dễ sai nhất của ứng dụng OCR trên web.
 #
-#   SAI:  def chay(img):  pipeline = OcrPipeline()   <- mỗi lần bấm nút
+#   SAI:  def chay(img):  pipeline = OcrPipeline()   <- mỗi lần upload ảnh
 #                          ^ tải lại 2 model (3-80 giây) -> app chậm khủng khiếp
 #
 #   ĐÚNG: tạo MỘT instance dùng chung cho mọi request.
 
-
 _pipeline: OcrPipeline | None = None   # None = chưa tải
+
+
 def get_pipeline() -> OcrPipeline:
-    """Trả về instace model duy nhất"""
+    """Trả về instance model duy nhất."""
     global _pipeline
     if _pipeline is None:
-        print("Đang tải model (có thể mất khoản 5-80s)")
+        print("Đang tải model (có thể mất khoảng 5-80s)")
         _pipeline = OcrPipeline()
         print("Model đã sẵn sàng")
     return _pipeline
 
 
-# 2. HÀM XỬ LÝ CHÍNH — gọi khi bấm nút "Chạy OCR"
+# ---------------------------------------------------------------------------
+# 2. HÀM XỬ LÝ CHÍNH — gọi tự động khi người dùng đưa ảnh vào
+# ---------------------------------------------------------------------------
 def run_ocr(image_path: str | None):
     """
     Nhận ảnh vào -> chạy pipeline -> trả về 5 giá trị cho 5 component.
@@ -64,7 +73,7 @@ def run_ocr(image_path: str | None):
                     (Gradio tự lưu file upload vào thư mục tạm rồi truyền path)
 
     Returns:
-        (ảnh kết quả, thông tin, text, file_ảnh_tải, file_json_tải)
+        (ảnh kết quả, thông tin, text, nút_lưu_ảnh, nút_lưu_json)
         THỨ TỰ này phải khớp hệt với outputs=[...] ở dưới cùng file.
     """
 
@@ -74,39 +83,41 @@ def run_ocr(image_path: str | None):
         # gr.Warning hiện popup cảnh báo trên giao diện
         # (không ném exception -> giao diện không bị sập)
         gr.Warning("Vui lòng chọn ảnh trước!")
-        return None, "**Chưa có ảnh**", "", None, None
+        return (None, "**Chưa có ảnh**", "",
+                gr.DownloadButton(value=None, interactive=False),
+                gr.DownloadButton(value=None, interactive=False))
 
     image = cv2.imread(image_path)
     if image is None:
         gr.Warning(f"Không đọc được file ảnh: {image_path}")
-        return None, "**Lỗi đọc ảnh**", "", None, None
+        return (None, "**Lỗi đọc ảnh**", "",
+                gr.DownloadButton(value=None, interactive=False),
+                gr.DownloadButton(value=None, interactive=False))
 
     h, w = image.shape[:2]           # shape = (cao, rộng, kênh) -> lấy 2 đầu
 
-
-    # chạy OCR và Đo thời gian 
+    # --- Chạy OCR và đo thời gian ---
     pipeline = get_pipeline()
     start = time.time()
     results = pipeline.run(image)
     elapsed = time.time() - start
 
-        # --- CARD 2: ảnh đã vẽ khung ---
+    # --- Ô 2: ảnh đã vẽ khung ---
     # draw_results() là hàm CÓ SẴN trong ocr/pipeline.py
     # -> không viết lại, đảm bảo kết quả giống hệt khi chạy dòng lệnh
     annotated = draw_results(image, results)
 
-    # Lưu ảnh kết quả để người dùng tải về
+    # Lưu ảnh kết quả để nút "Lưu ảnh nhận diện" tải về
     out_dir = RESULTS / "ui"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_img_path = out_dir / f"result_{Path(image_path).name}"
     cv2.imwrite(str(out_img_path), annotated)
 
-
-    # --- CARD 3: text ---
+    # --- Ô 3: text ---
     # Mỗi dòng = 1 khung chữ. join với "\n" để hiển thị nhiều dòng
     text = "\n".join(r.text for r in results) if results else "(không tìm thấy chữ)"
 
-    # --- Thông tin kèm theo (hiển thị ở Card 2) ---
+    # --- Thông tin kèm theo (hiển thị ở Ô 4) ---
     # Markdown: 2 khoảng trắng + \n = xuống dòng trong Markdown
     info = (
         f"**Kích thước ảnh:** {w}×{h} px  \n"
@@ -114,7 +125,7 @@ def run_ocr(image_path: str | None):
         f"**Thời gian xử lý:** {elapsed:.2f} giây"
     )
 
-     # --- File JSON để tải về ---
+    # --- File JSON để nút "Lưu JSON" tải về ---
     # r.box là numpy array -> JSON không đọc được numpy -> phải .tolist()
     data = {
         "image": Path(image_path).name,
@@ -127,120 +138,105 @@ def run_ocr(image_path: str | None):
                          encoding="utf-8")
     # ensure_ascii=False: giữ nguyên tiếng Việt thay vì escape \u1e00...
 
-    # Trả về theo THỨ TỰ khai báo trong outputs=[...] ở dưới
-    return annotated, info, text, str(out_img_path), str(json_path)
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# 3. ẢNH VÍ DỤ — cho người dùng thử ngay không cần có ảnh
-# ---------------------------------------------------------------------------
-def list_examples() -> list:
-    """Lấy 4 ảnh đầu tiên trong thư mục test làm ví dụ."""
-    if not TEST_IMAGES.exists():
-        return []
-    imgs = sorted(TEST_IMAGES.glob("*.jpg"))
-    # Gradio cần list các [đường_dẫn, nhãn_hiển_thế]
-    return [[str(p), p.name] for p in imgs[:4]]
+    # Trả về theo THỨ TỰ khai báo trong outputs=[...] ở dưới.
+    # DownloadButton: gán value=đường_dẫn_file và bật interactive=True
+    return (
+        annotated,
+        info,
+        text,
+        gr.DownloadButton(value=str(out_img_path), interactive=True),
+        gr.DownloadButton(value=str(json_path), interactive=True),
+    )
 
 
 # ---------------------------------------------------------------------------
-# 4. XÂY DỰNG GIAO DIỆN — gr.Blocks
+# 3. XÂY DỰNG GIAO DIỆN — gr.Blocks (GRID 2x2)
 # ---------------------------------------------------------------------------
-# gr.Blocks cho phép layout TỰ DO (hàng, cột) thay vì xếp dọc
-# như gr.Interface. Phù hợp khi cần 3 card cạnh nhau.
-#
-# with gr.Blocks() as demo:  = "context manager"
-#   mọi component tạo bên trong sẽ tự động NẰM trong demo
+# Grid = 2 hàng gr.Row, mỗi hàng 2 gr.Column.
+#   equal_height=True : 2 ô cùng hàng cao bằng nhau
+#   scale=1           : 2 cột chia đều chiều rộng
+#   min_width=0       : không bị rớt xuống dòng khi cửa sổ hẹp
+#   variant="panel"   : nền + viền dạng card
 with gr.Blocks(title="OCR tiếng Việt") as demo:
 
     # --- TIÊU ĐỀ ---
     gr.Markdown(
-        "# 📄 OCR tiếng Việt\n"
+        "# OCR tiếng Việt\n"
         "**PaddleOCR** tìm khung chữ → **VietOCR** đọc chữ tiếng Việt"
     )
 
-    # --- HÀNG CHỨA 3 CARD ---
-    with gr.Row():                     # Row = xếp CẠNH NHAU (ngang)
+    # ================= HÀNG 1: ẢNH VÀO | ẢNH NHẬN DIỆN =================
+    with gr.Row(equal_height=True):
 
-        # ================= CARD 1: INPUT =================
-        with gr.Column():              # Column = 1 cột trong hàng
-            gr.Markdown("### 1️⃣ INPUT — Chọn ảnh")
+        # ---- Ô 1: ẢNH ĐẦU VÀO ----
+        with gr.Column(scale=1, min_width=0, variant="panel"):
+            gr.Markdown("###  Ảnh đầu vào")
             input_image = gr.Image(
                 type="filepath",       # trả về ĐƯỜNG DẪN file (không phải numpy)
-                label="Kéo thả hoặc bấm để chọn ảnh",
-                height=260,
+                label="Kéo thả hoặc bấm để chọn ảnh (chọn xong tự chạy OCR)",
+                height=380,
             )
 
-            # gr.Examples: bảng ảnh mẫu. Khi TRUYỀN fn thì bấm 1 ảnh
-            # là CHẠY LUÔN (không cần bấm nút "Chạy OCR" riêng).
-            examples = list_examples()
-            if examples:
-                gr.Examples(
-                    examples=examples,          # [[đường_dẫn, nhãn], ...]
-                    inputs=input_image,         # component nhận giá trị
-                    fn=run_ocr,                 # hàm chạy khi bấm ảnh mẫu
-                    outputs=[None, None, None, None, None],
-                    #         ^ 5 None = không cập nhật output nào khi chạy
-                    #           (vì Gradio tự vẽ ảnh mẫu, ta không ép)
-                    label="📸 Ảnh ví dụ",
-                )
-
-        # ================= CARD 2: DETECTION =================
-        with gr.Column():
-            gr.Markdown("### 2️⃣ DETECTION — Ảnh có khung chữ")
+        # ---- Ô 2: ẢNH NHẬN DIỆN ----
+        with gr.Column(scale=1, min_width=0, variant="panel"):
+            gr.Markdown("### 🔍 Ảnh nhận diện")
             output_image = gr.Image(
                 type="numpy",          # trả về mảng numpy để hiển thị trực tiếp
-                label="Kết quả",
-                height=260,
+                label="Ảnh có khung chữ",
+                height=380,
             )
-            info_box = gr.Markdown("Chưa chạy")   # info: số khung, thời gian
 
-        # ================= CARD 3: TEXT =================
-        with gr.Column():
-            gr.Markdown("### 3️⃣ TEXT — Chữ đọc được")
+    # ================= HÀNG 2: KÝ TỰ | THÔNG TIN + NÚT LƯU =================
+    with gr.Row(equal_height=True):
+
+        # ---- Ô 3: KÝ TỰ NHẬN DIỆN ĐƯỢC ----
+        with gr.Column(scale=1, min_width=0, variant="panel"):
+            gr.Markdown("### Ký tự nhận diện được")
             output_text = gr.Textbox(
                 label="Kết quả",
-                lines=11,              # số dòng hiển thị
+                lines=10,              # số dòng hiển thị
                 max_lines=20,
                 placeholder="Chữ đọc được sẽ hiển thị ở đây...",
-                buttons=["copy"],   # nút Copy (Gradio 6: thay cho show_copy_button)
+                buttons=["copy"],      # nút Copy (Gradio 6)
             )
 
-            with gr.Row():             # 2 nút tải xếp ngang
-                download_image = gr.File(
-                    label="⬇️ Tải ảnh kết quả", interactive=False)
-                # interactive=False: chỉ hiển thị khi CÓ file (bấm nút disabled)
-                download_json = gr.File(
-                    label="⬇️ Tải JSON", interactive=False)
+        # ---- Ô 4: THÔNG TIN + NÚT LƯU ----
+        with gr.Column(scale=1, min_width=0, variant="panel"):
+            gr.Markdown("### Thông tin & Lưu kết quả")
+            info_box = gr.Markdown("Chưa chạy")   # info: số khung, thời gian
 
-    # --- NÚT CHẠY ---
-    run_btn = gr.Button("🚀 Chạy OCR", variant="primary", size="lg")
-    gr.Markdown("*Nhấn nút trên để bắt đầu*")
+            # DownloadButton: bấm là tải file về máy.
+            # interactive=False: bị mờ cho tới khi OCR xong.
+            with gr.Row():
+                save_image_btn = gr.DownloadButton(
+                    "Lưu ảnh nhận diện",
+                    interactive=False,
+                )
+                save_json_btn = gr.DownloadButton(
+                    "Lưu JSON",
+                    interactive=False,
+                )
 
-    # ---------------------------------------------------------------------------
-    # 5. NỐI NÚT VỚI HÀM — event binding
-    # ---------------------------------------------------------------------------
-    # .click(fn=..., inputs=..., outputs=...)
-    #   fn     : hàm Python gọi khi bấm nút
+    # -----------------------------------------------------------------------
+    # 4. NỐI SỰ KIỆN — chạy OCR NGAY khi có ảnh được đưa vào
+    # -----------------------------------------------------------------------
+    # .upload : kích hoạt khi người dùng kéo thả / chọn file mới.
+    #           (khác .change: .change còn chạy cả khi xóa ảnh -> hiện cảnh báo thừa)
     #   inputs : component ĐƯA GIÁ TRỊ vào hàm
     #   outputs: component NHẬN KẾT QUẢ (thứ tự phải khớp return của hàm)
-    run_btn.click(
+    input_image.upload(
         fn=run_ocr,
         inputs=input_image,
-        # 5 giá trị return của run_ocr() -> 5 component nhận
         outputs=[output_image, info_box, output_text,
-                 download_image, download_json],
+                 save_image_btn, save_json_btn],
     )
 
 
 # ---------------------------------------------------------------------------
-# 6. KHỞI CHẠY SERVER
+# 5. KHỞI CHẠY SERVER
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Preload model NGAY khi khởi động thay vì chờ lần bấm đầu tiên.
+    # Preload model NGAY khi khởi động thay vì chờ lần upload đầu tiên.
     #   -> Người dùng mở trang là app đã sẵn sàng, không phải chờ tải model.
     get_pipeline()
 
