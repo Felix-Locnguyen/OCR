@@ -29,27 +29,14 @@ import sys
 import time 
 from pathlib import Path
 
-import cv2
-import gradio as gr
-
-# Thêm thư mục chứa file này vào đường dẫn tìm kiếm để import được package ocr
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from ocr.config import RESULTS
-from ocr.pipeline import OcrPipeline, draw_results
-
-# ---------------------------------------------------------------------------
-# 0. ZEROGPU — decorator @spaces.GPU
-# ---------------------------------------------------------------------------
-# Space đang chạy hardware zero-a10g (ZeroGPU). Quy tắc của Hugging Face:
-# Space ZeroGPU PHẢI có ít nhất MỘT hàm gắn @spaces.GPU, nếu không app sẽ bị
-# terminate lúc startup với lỗi:
+# --- ZEROGPU: import `spaces` PHẢI đứng TRƯỚC cv2/paddle/torch ---
+# Thư viện spaces TỪ CHỐI import nếu CUDA đã được init trước đó (trên Space,
+# ocr/config.py gọi torch.cuda.is_available() lúc import -> init CUDA).
+# Ngoài ra Space hardware zero-a10g BẮT BUỘC app có hàm @spaces.GPU, nếu
+# không app bị terminate lúc startup:
 #   "No @spaces.GPU function detected during startup"
-# Thật ra code mình vẫn chạy CPU (config.py ép CPU khi có env SPACE) —
-# decorator chỉ để thỏa mãn quy tắc của platform.
-#
-# Máy local KHÔNG cài thư viện `spaces` -> fallback: nếu import thất bại thì
-# dùng decorator "vô hại" (trả về nguyên hàm) để app vẫn chạy local được.
+# Máy local KHÔNG cài thư viện spaces -> fallback decorator "vô hại"
+# (trả về nguyên hàm) để app vẫn chạy local được.
 try:
     import spaces
 except Exception as _e:
@@ -60,6 +47,17 @@ except Exception as _e:
             if fn is None:           # dùng dạng @spaces.GPU(...) hoặc @spaces.GPU
                 return lambda f: f
             return fn
+
+import cv2
+import gradio as gr
+
+# Thêm thư mục chứa file này vào đường dẫn tìm kiếm để import được package ocr
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ocr.config import RESULTS
+from ocr.pipeline import OcrPipeline, draw_results
+
+# (Lưu ý: import thư viện `spaces` nằm ở ĐẦU file — xem chú thích ở trên.)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +86,7 @@ def get_pipeline() -> OcrPipeline:
 # ---------------------------------------------------------------------------
 # 2. HÀM XỬ LÝ CHÍNH — gọi tự động khi người dùng đưa ảnh vào
 # ---------------------------------------------------------------------------
-@spaces.GPU             # ZeroGPU: bắt buộc có @spaces.GPU (xem mục 0 ở trên)
+@spaces.GPU             # ZeroGPU: BẮT BUỘC (xem chú thích đầu file)
 def run_ocr(image_path: str | None):
     """
     Nhận ảnh vào -> chạy pipeline -> trả về 5 giá trị cho 5 component.
