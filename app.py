@@ -38,6 +38,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ocr.config import RESULTS
 from ocr.pipeline import OcrPipeline, draw_results
 
+# ---------------------------------------------------------------------------
+# 0. ZEROGPU — decorator @spaces.GPU
+# ---------------------------------------------------------------------------
+# Space đang chạy hardware zero-a10g (ZeroGPU). Quy tắc của Hugging Face:
+# Space ZeroGPU PHẢI có ít nhất MỘT hàm gắn @spaces.GPU, nếu không app sẽ bị
+# terminate lúc startup với lỗi:
+#   "No @spaces.GPU function detected during startup"
+# Thật ra code mình vẫn chạy CPU (config.py ép CPU khi có env SPACE) —
+# decorator chỉ để thỏa mãn quy tắc của platform.
+#
+# Máy local KHÔNG cài thư viện `spaces` -> cần fallback: nếu import thất bại
+# thì dùng decorator "vô hại" (trả về nguyên hàm) để app vẫn chạy local.
+try:
+    from spaces import GPU as _gpu
+except Exception:
+    def _gpu(fn=None, **kwargs):
+        """Decorator rỗng — dùng khi không có thư viện spaces (chạy local)."""
+        if fn is None:            # dùng dạng @_gpu(...) hoặc @_gpu
+            return lambda f: f
+        return fn
+
 
 # ---------------------------------------------------------------------------
 # 1. MODEL — nạp MỘT LẦN DUY NHẤT
@@ -65,6 +86,7 @@ def get_pipeline() -> OcrPipeline:
 # ---------------------------------------------------------------------------
 # 2. HÀM XỬ LÝ CHÍNH — gọi tự động khi người dùng đưa ảnh vào
 # ---------------------------------------------------------------------------
+@_gpu                      # ZeroGPU: bắt buộc có @spaces.GPU (xem mục 0 ở trên)
 def run_ocr(image_path: str | None):
     """
     Nhận ảnh vào -> chạy pipeline -> trả về 5 giá trị cho 5 component.
