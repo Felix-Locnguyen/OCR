@@ -22,3 +22,6 @@ weights/
 
 # Kết quả OCR
 Data/results/
+
+# Repo Hugging Face Space (nested repo — có git riêng, không đẩy lên GitHub)
+MY-OCR/
