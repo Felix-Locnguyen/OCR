@@ -48,16 +48,18 @@ from ocr.pipeline import OcrPipeline, draw_results
 # Thật ra code mình vẫn chạy CPU (config.py ép CPU khi có env SPACE) —
 # decorator chỉ để thỏa mãn quy tắc của platform.
 #
-# Máy local KHÔNG cài thư viện `spaces` -> cần fallback: nếu import thất bại
-# thì dùng decorator "vô hại" (trả về nguyên hàm) để app vẫn chạy local.
+# Máy local KHÔNG cài thư viện `spaces` -> fallback: nếu import thất bại thì
+# dùng decorator "vô hại" (trả về nguyên hàm) để app vẫn chạy local được.
 try:
-    from spaces import GPU as _gpu
-except Exception:
-    def _gpu(fn=None, **kwargs):
-        """Decorator rỗng — dùng khi không có thư viện spaces (chạy local)."""
-        if fn is None:            # dùng dạng @_gpu(...) hoặc @_gpu
-            return lambda f: f
-        return fn
+    import spaces
+except Exception as _e:
+    print(f"[WARN] Không import được thư viện spaces ({_e}) -> dùng fallback.")
+    class spaces:                    # shim khi chạy local (không có ZeroGPU)
+        @staticmethod
+        def GPU(fn=None, **kwargs):
+            if fn is None:           # dùng dạng @spaces.GPU(...) hoặc @spaces.GPU
+                return lambda f: f
+            return fn
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +88,7 @@ def get_pipeline() -> OcrPipeline:
 # ---------------------------------------------------------------------------
 # 2. HÀM XỬ LÝ CHÍNH — gọi tự động khi người dùng đưa ảnh vào
 # ---------------------------------------------------------------------------
-@_gpu                      # ZeroGPU: bắt buộc có @spaces.GPU (xem mục 0 ở trên)
+@spaces.GPU             # ZeroGPU: bắt buộc có @spaces.GPU (xem mục 0 ở trên)
 def run_ocr(image_path: str | None):
     """
     Nhận ảnh vào -> chạy pipeline -> trả về 5 giá trị cho 5 component.
