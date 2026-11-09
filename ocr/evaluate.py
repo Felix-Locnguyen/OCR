@@ -103,20 +103,17 @@ def iou(box_a, box_b) -> float:
     Returns:
         Số float từ 0 đến 1
     """
-    try:
-        # Chuyển 4 điểm thành hình đa giác của Shapely
-        pa, pb = Polygon(box_a), Polygon(box_b)
+    # Chuyển 4 điểm thành hình đa giác của Shapely
+    pa, pb = Polygon(box_a), Polygon(box_b)
 
-        # is_valid = False khi hình tự cắt nhau (rìa tự giao nhau) -> lỗi dữ liệu
-        if not pa.is_valid or not pb.is_valid:
-            return 0.0
+    # is_valid = False khi hình tự cắt nhau (rìa tự giao nhau) -> lỗi dữ liệu
+    if not pa.is_valid or not pb.is_valid:
+        return 0.0
 
-        inter = pa.intersection(pb).area   # diện tích phần GIAO
-        union = pa.union(pb).area          # diện tích phần HỢP (giao + hôi)
+    inter = pa.intersection(pb).area   # diện tích phần GIAO
+    union = pa.union(pb).area          # diện tích phần HỢP (giao + hôi)
 
-        return inter / union if union > 0 else 0.0
-    except Exception:
-        return 0.0                         # lỗi hình học -> coi như không khớp
+    return inter / union if union > 0 else 0.0
 
 
 def merge_to_lines(boxes: list, y_tol=20, x_gap=10) -> list:
@@ -172,27 +169,19 @@ def merge_to_lines(boxes: list, y_tol=20, x_gap=10) -> list:
             lines.append({"cy": cy, "x0": x0, "x1": x1, "n": 1,
                           "text": text, "pts": [pts]})
 
-    # Gom các điểm của từng dòng -> tính khung chữ nhật bao
-    return [(np.array(_box_from_line(ln)), ln["text"]) for ln in lines]
+    # Gom toàn bộ điểm của từng dòng -> tính khung chữ nhật bao ngoài
+    result = []
+    for ln in lines:
+        pts = np.vstack(ln["pts"])   # vstack: xếp chồng nhiều mảng thành 1 ma trận
 
+        # Lấy biên cực trị -> hình chữ nhật bao
+        x0, x1 = pts[:, 0].min(), pts[:, 0].max()
+        y0, y1 = pts[:, 1].min(), pts[:, 1].max()
 
-def _box_from_line(ln) -> np.ndarray:
-    """Lấy khung chữ nhật bao (bounding box) của 1 dòng.
-
-    Input là dict có mảng "pts" (list các box con).
-    Output là tứ giác hình chữ nhật bao trọn tất cả.
-
-    Gọi là "_box..." (có gạch dưới) = convention báo "hàm nội bộ,
-    đừng gọi từ ngoài file này".
-    """
-    pts = np.vstack(ln["pts"])   #.vstack: xếp chồng nhiều mảng thành 1 ma trận lớn
-
-    # Lấy biên cực trị -> hình chữ nhật bao
-    x0, x1 = pts[:, 0].min(), pts[:, 0].max()
-    y0, y1 = pts[:, 1].min(), pts[:, 1].max()
-
-    # 4 đỉnh của hình chữ nhật, theo chiều kim đồng hồ từ góc trên-trái
-    return np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
+        # 4 đỉnh hình chữ nhật, theo chiều kim đồng hồ từ góc trên-trái
+        box = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
+        result.append((box, ln["text"]))
+    return result
 
 
 def evaluate(results_by_image: dict, by_line=False) -> dict:

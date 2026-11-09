@@ -23,7 +23,7 @@ from .recognizer import Recognizer
 class OcrResult:
     """Kết quả OCR cho MỘT khung chữ.
 
-    @dataclass (data class) tự动生成 __init__, __repr__ cho bạn, nên mình chỉ
+    @dataclass (data class) tự động tạo __init__, __repr__ cho bạn, nên mình chỉ
     cần khai báo TRƯỜNG là xong. Nếu viết thủ công sẽ dài dòng hơn nhiều.
 
     Thay vì trả 2 giá trị rời rạc (box, text) rồi lo bị nhầm chỗ,
@@ -49,12 +49,7 @@ class OcrResult:
 class OcrPipeline:
     """Điều phối toàn bộ: ảnh vào -> list kết quả text ra."""
 
-    def __init__(self, use_batch=True):
-        """
-        Args:
-            use_batch: True = đọc chữ theo lô (nhanh),
-                       False = đọc từng ảnh một (dễ debug, chậm hơn)
-        """
+    def __init__(self):
         # Khởi tạo 2 model. Mỗi lần chạy chương trình chỉ làm việc này 1 lần,
         # sau đó tái sử dụng cho nhiều ảnh.
         print("Đang tải model PaddleOCR (detection)...")
@@ -62,8 +57,6 @@ class OcrPipeline:
 
         print("Đang tải model VietOCR (recognition)...")
         self.recognizer = Recognizer()
-
-        self.use_batch = use_batch
 
     def run(self, image_bgr) -> list[OcrResult]:
         """Chạy 2 bước lên 1 ảnh.
@@ -79,25 +72,17 @@ class OcrPipeline:
         # Cắt mỗi khung ra ảnh riêng
         crops = [self.detector.crop(image_bgr, b) for b in boxes]
 
-        if self.use_batch:
-            # VẤN ĐỀ: có thể có crop bị lỗi (trả về None) -> không đọc được.
-            # Nhưng mình PHẢI giữ đúng vị trí của nó trong list,
-            # nếu không thì text sẽ bị NỐI SAI với khung tương ứng!
-            #
-            # Giải pháp: ghi lại index (vị trí) gốc của crop còn tốt,
-            #           chỉ đưa crop tốt đi đọc, rồi ghép lại theo index.
-            valid = [(i, c) for i, c in enumerate(crops) if c is not None]
-            texts = self.recognizer.read_batch([c for _, c in valid])
+        # VẤN ĐỀ: có thể có crop bị lỗi (trả về None) -> không đọc được.
+        # Nhưng mình PHẢI giữ đúng vị trí của nó trong list,
+        # nếu không thì text sẽ bị NỐI SAI với khung tương ứng!
+        #
+        # Giải pháp: ghi lại index (vị trí) gốc của crop còn tốt,
+        #           chỉ đưa crop tốt đi đọc, rồi ghép lại theo index.
+        valid = [(i, c) for i, c in enumerate(crops) if c is not None]
+        texts = self.recognizer.read_batch([c for _, c in valid])
 
-            # zip gộp index với text tương ứng -> khôi phục đúng khung
-            result = [OcrResult(boxes[i], t) for (i, _), t in zip(valid, texts)]
-        else:
-            # Đường đơn giản: bỏ qua crop lỗi, chạy từng cái
-            result = [
-                OcrResult(b, self.recognizer.read(c))
-                for b, c in zip(boxes, crops)
-                if c is not None
-            ]
+        # zip gộp index với text tương ứng -> khôi phục đúng khung
+        result = [OcrResult(boxes[i], t) for (i, _), t in zip(valid, texts)]
 
         # SẮP XẾP LẠI theo thứ tự đọc:
         #   round(y / 30) = gom vào "hàng" (cứ 30px 1 hàng)

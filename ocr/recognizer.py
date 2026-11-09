@@ -51,33 +51,6 @@ class Recognizer:
         # Predictor tự xử lý: đọc config -> dựng model -> load weights.
         self.predictor = Predictor(self.config)
 
-    def read(self, image_bgr) -> str:
-        """Đọc 1 ảnh khung chữ -> chuỗi văn bản.
-
-        Args:
-            image_bgr: ảnh khung chữ (do Detector.crop trả về), dạng BGR
-
-        Returns:
-            Chuỗi tiếng Việt, đã bỏ khoảng trắng thừa ở 2 đầu
-        """
-        # Chỗ này phòng hờ: ảnh bị lỗi/cắt rỗng thì trả về chuỗi rỗng
-        # thay vì để chương trình sập.
-        if image_bgr is None or image_bgr.size == 0:
-            return ""
-
-        # ĐỔI THỨ TỰ KÊNH MÀU:
-        #   OpenCV lưu ảnh thứ tự BGR (Blue-Green-Red)
-        #   PIL/most model mong đợi RGB (Red-Green-Blue)
-        #   Nếu KHÔNG đổi thì màu bị đảo -> model nhận diện kém đi nhiều.
-        rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-        # Image.fromarray(): chuyển numpy array -> đối tượng PIL Image
-        # predictor.predict(): chạy model, trả về chuỗi ký tự
-        text = self.predictor.predict(Image.fromarray(rgb))
-
-        # .strip() bỏ khoảng trắng đầu/cuối (VD: "  hello  " -> "hello")
-        return text.strip()
-
     def read_batch(self, images: list) -> list[str]:
         """Đọc NHIỀU ảnh một lúc — nhanh hơn nhiều so gọi lẻ từng ảnh.
 
@@ -92,7 +65,11 @@ class Recognizer:
             List text, THỨ TỰ GIỐNG hệt list input (rất quan trọng để nối
             kết quả đúng với khung chữ tương ứng)
         """
-        # Lọc bỏ ảnh lỗi, đồng thời đổi sang PIL
+        # ĐỔI THỨ TỰ KÊNH MÀU (quan trọng!):
+        #   OpenCV lưu ảnh thứ tự BGR (Blue-Green-Red)
+        #   PIL/most model mong đợi RGB (Red-Green-Blue)
+        #   Nếu KHÔNG đổi thì màu bị đảo -> model nhận diện kém đi nhiều.
+        # Vừa đổi sang PIL, vừa lọc bỏ ảnh lỗi (None hoặc rỗng).
         pil_images = [
             Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
             for im in images

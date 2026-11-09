@@ -128,27 +128,28 @@ def load_json(name: str) -> dict:
     }
 
 
-def print_metrics(metrics: dict, title: str):
-    """In bảng metric cho gọn, dùng lại được cho cả 2 chế độ đánh giá."""
-    print(f"\n=== {title} ===")
-    print(f"  Detection  - Precision: {metrics['det_precision']:.4f} | "
-          f"Recall: {metrics['det_recall']:.4f} | "
-          f"Hmean: {metrics['det_hmean']:.4f}")
-    print(f"  Recognition- Accuracy : {metrics['rec_accuracy']:.4f} "
-          f"({metrics['boxes_gt']} khung có chữ)")
-    print(f"  End-to-End - Accuracy : {metrics['e2e_accuracy']:.4f}")
-    print(f"  Số khung: GT khớp {metrics['boxes_matched']} | "
-          f"dự đoán {metrics['boxes_pred']}")
-
-
 def run_evaluation(results_by_image: dict):
     """In đánh giá ở CẢ 2 chế độ (word-level và line-level)."""
     from ocr.evaluate import evaluate
 
-    print_metrics(evaluate(results_by_image),
-                  "ĐÁNH GIÁ THEO TỪ (word-level) - dataset gốc")
-    print_metrics(evaluate(results_by_image, by_line=True),
-                  "ĐÁNH GIÁ THEO DÒNG (line-level) - công bằng với model")
+    # Chạy evaluate 2 lần: 1 lần so theo TỪ, 1 lần so theo DÒNG
+    modes = [
+        (evaluate(results_by_image),
+         "ĐÁNH GIÁ THEO TỪ (word-level) - dataset gốc"),
+        (evaluate(results_by_image, by_line=True),
+         "ĐÁNH GIÁ THEO DÒNG (line-level) - công bằng với model"),
+    ]
+
+    for m, title in modes:
+        print(f"\n=== {title} ===")
+        print(f"  Detection  - Precision: {m['det_precision']:.4f} | "
+              f"Recall: {m['det_recall']:.4f} | "
+              f"Hmean: {m['det_hmean']:.4f}")
+        print(f"  Recognition- Accuracy : {m['rec_accuracy']:.4f} "
+              f"({m['boxes_gt']} khung có chữ)")
+        print(f"  End-to-End - Accuracy : {m['e2e_accuracy']:.4f}")
+        print(f"  Số khung: GT khớp {m['boxes_matched']} | "
+              f"dự đoán {m['boxes_pred']}")
 
 
 def main():

@@ -45,7 +45,7 @@ class Detector:
 
         Returns:
             Danh sách các mảng numpy shape (4, 2) — 4 điểm (x, y) mỗi khung.
-            Kết quả đã sắp xếp theo thứ tự ĐỌC: trên xuống dưới, trái sang phải.
+            (Thứ tự đọc sẽ được sắp ở OcrPipeline.run — chỉ cần 1 chỗ.)
         """
         # predict() trả về LIST kết quả (mỗi phần tử cho 1 ảnh đầu vào).
         # Vì mình chỉ truyền 1 ảnh nên lấy phần tử [0].
@@ -56,24 +56,7 @@ class Detector:
         boxes = np.array(result["dt_polys"], dtype=np.int32)
 
         # Không có chữ nào trong ảnh -> trả về list rỗng
-        if len(boxes) == 0:
-            return []
-
-        # ---- SẮP XẾP THỨ TỰ ĐỌC ----
-        # Model trả về khung theo thứ tự tùy ý, nhưng ta cần đọc đúng thứ tự
-        # chữ trong ảnh (giống đọc sách: trái sang phải, trên xuống dưới).
-        #
-        # Ý tưởng: gom các khung vào "hàng" theo toạ độ y (chiều dọc).
-        #   round(y / 30) nghĩa là cứ mỗi 30 pixel coi là 1 hàng khác nhau.
-        #   Ví dụ y=100 -> hàng 3, y=110 -> hàng 3 (cùng hàng), y=150 -> hàng 5
-        # Sau đó trong cùng hàng, sắp theo x (trái trước).
-        centers = boxes.mean(axis=1)                 # tâm mỗi khung, shape (N, 2)
-        order = sorted(
-            range(len(boxes)),
-            key=lambda i: (round(centers[i][1] / 30), centers[i][0]),
-            #           ^hàng (y)      ^rồi đến cột (x)
-        )
-        return [boxes[i] for i in order]              # trả về theo thứ tự mới
+        return list(boxes)
 
     @staticmethod
     def crop(image_bgr, box) -> np.ndarray:
